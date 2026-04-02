@@ -3,21 +3,118 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Piezo Bot - Vision</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f4f4f4; }
+        #chat { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        #messages { 
+            border: 1px solid #ddd; 
+            padding: 15px; 
+            height: 500px; 
+            overflow-y: auto; 
+            margin-bottom: 15px;
+            background: #fafafa;
+        }
+        .user { text-align: right; color: #0066ff; margin: 10px 0; }
+        .bot { text-align: left; color: #009900; margin: 10px 0; }
+        .image-preview { max-width: 300px; margin: 10px 0; border-radius: 8px; }
+        input[type="file"] { margin: 10px 0; }
+    </style>
 </head>
 <body>
-    <h1>Piezo BOt</h1>
-    <div>
-        <textarea name="Quest" id="Quest"></textarea>
-        <button>Send Question</button>
+    <div id="chat">
+        <h2>Piezo Bot with Vision (Google Gemini)</h2>
+        <div id="messages"></div>
 
+        <form id="chat-form">
+            <textarea id="user-input" placeholder="Type message or ask about the image..."></textarea><br>
+            
+            <input type="file" id="image-upload" accept="image/*">
+            <div id="preview">
+                
+            </div><br>
+            
+            <button type="submit">Send</button>
+        </form>
     </div>
-    <br>
-    <br>
-    <div>
-        <span>
-            Response Here: 
-        </span>
-    </div>
+
+    <script>
+        const messagesDiv = document.getElementById('messages');
+        const form = document.getElementById('chat-form');
+        const input = document.getElementById('user-input');
+        const fileInput = document.getElementById('image-upload');
+        const preview = document.getElementById('preview');
+
+        let selectedImage = null;
+        let selectedMimeType = null;
+
+        // Preview image when selected
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                selectedMimeType = file.type;
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    selectedImage = ev.target.result;  // base64 data URL
+                    preview.innerHTML = `<img src="${selectedImage}" class="image-preview">`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        function addMessage(text, type) {
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = text;
+            messagesDiv.appendChild(div);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const question = input.value.trim();
+            if (!question && !selectedImage) return;
+
+            if (question) addMessage(question, 'user');
+            input.value = '';
+
+            const botMessage = document.createElement('div');
+            botMessage.className = 'bot';
+            messagesDiv.appendChild(botMessage);
+
+            try {
+                const payload = {
+                    message: question,
+                    image: selectedImage,
+                    mime_type: selectedMimeType
+                };
+
+                const response = await fetch('/answer/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value, { stream: true });
+                    botMessage.textContent += chunk;
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                }
+            } catch (err) {
+                botMessage.textContent = "Sorry, something went wrong.";
+            }
+
+            // Clear image after sending
+            selectedImage = null;
+            selectedMimeType = null;
+            preview.innerHTML = '';
+            fileInput.value = '';
+        });
+    </script>
 </body>
 </html>
